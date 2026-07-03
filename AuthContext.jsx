@@ -9,6 +9,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true); // Trạng thái đang tải lúc khởi tạo
 
   // Khi reload trang → kiểm tra token còn tồn tại hay không
   useEffect(() => {
@@ -18,6 +19,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(true);
       setUser(JSON.parse(userData));
     }
+    setIsLoading(false); // Đã kiểm tra xong
   }, []);
 
   // Hàm đăng nhập → lưu token + cập nhật state
@@ -37,7 +39,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, loginAuth, logoutAuth }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, isLoading, loginAuth, logoutAuth }}>
       {children}
     </AuthContext.Provider>
   );

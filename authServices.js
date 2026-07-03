@@ -17,3 +17,18 @@ export async function register(data) {
 export async function login(data) {
   return axiosClient.post("auth/local", data);
 }
+
+export async function profile() {
+  const response = await axiosClient.get("auth/me");
+  return response.data?.data || response.data;
+}
+
+export async function updateProfile(data) {
+  // Gửi POST /auth/me kèm formData (đã cấu hình route POST /auth/me trong Laravel)
+  const response = await axiosClient.post("auth/me", data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data?.data || response.data;
+}
