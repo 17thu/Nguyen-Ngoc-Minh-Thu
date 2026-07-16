@@ -50,3 +50,26 @@ export async function deleteBrand(id) {
     const res = await axiosClient.delete(`/brands/${id}`);
     return res;
 }
+
+export async function getTrashedBrandsByPageSize(params = { page: 1, pageSize: 8 }) {
+    const { page, pageSize, search } = params;
+    let queryParams = {
+        pagination: { page, pageSize },
+        filters: {}
+    };
+    if (search) {
+        queryParams.filters.name = { $contains: search };
+    }
+    const res = await axiosClient.get("/trashedBrandsByPageSize", { params: queryParams });
+    return res;
+}
+
+export async function restoreBrand(id) {
+    const res = await axiosClient.post(`/brands/${id}/restore`);
+    return res;
+}
+
+export async function forceDeleteBrand(id) {
+    const res = await axiosClient.delete(`/brands/${id}/force`);
+    return res;
+}

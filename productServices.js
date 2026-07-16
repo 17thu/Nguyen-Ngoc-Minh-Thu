@@ -106,3 +106,38 @@ export async function deleteProduct(id) {
     const res = await axiosClient.delete(`/products/${id}`);
     return res;
 }
+
+// Lấy danh sách sản phẩm trong thùng rác
+export async function getTrashedProductsByPageSize(params = { page: 1, pageSize: 8 }) {
+    const { page, pageSize, search } = params;
+    let queryParams = {
+        pagination: { page, pageSize },
+        filters: {},
+        populate: '*'
+    };
+    if (search) {
+        queryParams.filters.product_name = { $contains: search };
+    }
+    const res = await axiosClient.get("/trashedProductsByPageSize", { params: queryParams });
+    return res;
+}
+
+// Khôi phục sản phẩm từ thùng rác
+export async function restoreProduct(id) {
+    const res = await axiosClient.post(`/products/${id}/restore`);
+    return res;
+}
+
+// Xóa vĩnh viễn sản phẩm
+export async function forceDeleteProduct(id) {
+    const res = await axiosClient.delete(`/products/${id}/force`);
+    return res;
+}
+
+// Lấy sản phẩm theo start limit (cho dashboard)
+export async function getProductsByStartLimit(start = 0, limit = 5) {
+    const res = await axiosClient.get("/productsByStartLimit", { 
+        params: { start, limit } 
+    });
+    return res;
+}

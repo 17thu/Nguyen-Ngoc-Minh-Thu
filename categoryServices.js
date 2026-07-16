@@ -49,3 +49,29 @@ export async function deleteCategory(id) {
     const res = await axiosClient.delete(`/categories/${id}`);
     return res;
 }
+
+// Lấy danh sách danh mục trong thùng rác
+export async function getTrashedCategoriesByPageSize(params = { page: 1, pageSize: 8 }) {
+    const { page, pageSize, search } = params;
+    let queryParams = {
+        pagination: { page, pageSize },
+        filters: {}
+    };
+    if (search) {
+        queryParams.filters.category_name = { $contains: search };
+    }
+    const res = await axiosClient.get("/trashedCategoriesByPageSize", { params: queryParams });
+    return res;
+}
+
+// Khôi phục danh mục từ thùng rác
+export async function restoreCategory(id) {
+    const res = await axiosClient.post(`/categories/${id}/restore`);
+    return res;
+}
+
+// Xóa vĩnh viễn danh mục
+export async function forceDeleteCategory(id) {
+    const res = await axiosClient.delete(`/categories/${id}/force`);
+    return res;
+}
