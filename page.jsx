@@ -1,300 +1,200 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-import { getProductsByStartLimit, getNewProducts } from '@/services/productServices';
-import { getOrdersByPageSize } from '@/services/orderServices';
-import { getAllUsers } from '@/services/userServices';
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { getPostByIdOrSlug, getActivePosts } from "@/services/postServices";
 
-export default function AdminPage() {
-  const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalOrders: 0,
-    totalRevenue: 0,
-  });
+// ── SVG Icons Tối Giản ──
+const Icons = {
+  Calendar: () => <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+  Clock: () => <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  ArrowLeft: () => <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:-translate-x-1 duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>,
+  Share: () => <svg className="w-4 h-4 text-gray-500 hover:text-rose-600 transition-colors cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>,
+  Sparkles: () => <svg className="w-4 h-4 text-amber-500 fill-amber-400 flex-shrink-0" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+};
 
-  const currentDate = new Date().toLocaleDateString('vi-VN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
+// ── Helper định dạng dữ liệu chi tiết ──
+const formatDetailData = (data) => {
+  const titleLower = (data.title || "").toLowerCase();
+  let category = "Công thức làm bánh";
+  if (titleLower.includes("top 5") || titleLower.includes("châu âu") || titleLower.includes("minimalist")) category = "Góc ẩm thực";
+  else if (titleLower.includes("thương hiệu") || titleLower.includes("sweet bakery") || titleLower.includes("hành trình")) category = "Về Sweet Bakery";
+  else if (titleLower.includes("bột mì") || titleLower.includes("bảo quản")) category = "Mẹo vặt làm bánh";
+
+  let dateStr = "08/07/2026";
+  if (data.created_at) {
+    const d = new Date(data.created_at);
+    if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  return {
+    id: data.id,
+    slug: data.slug || data.id,
+    title: data.title || "Bài viết không tiêu đề",
+    category,
+    author: data.id % 2 === 0 ? "Sweet Bakery Team" : "Nguyễn Ngọc Minh Thư",
+    authorRole: data.id % 2 === 0 ? "Food Curators & Editors" : "Chef & Founder Sweet Bakery",
+    date: dateStr,
+    readTime: `${Math.floor(data.id * 1.5 + 3)} phút đọc`,
+    image: data.thumbnail || "/images/posts/mousse_chanh_day.png",
+    excerpt: data.description || "Khám phá những bí quyết và kiến thức ẩm thực tuyệt vời cùng Sweet Bakery...",
+    content: data.content || "<p>Nội dung đang được cập nhật...</p>"
+  };
+};
+
+// ── Component con: Thẻ bài viết liên quan ──
+const RelatedCard = ({ rel }) => (
+  <Link href={`/posts/${rel.slug}`} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-rose-100 flex flex-col justify-between group block">
+    <div>
+      <div className="aspect-[16/10] overflow-hidden bg-pink-50">
+        <img src={rel.image} alt={rel.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+      </div>
+      <div className="p-5 space-y-2">
+        <h4 className="font-bold text-gray-900 text-sm leading-snug group-hover:text-rose-600 transition-colors line-clamp-2">{rel.title}</h4>
+        <p className="text-gray-500 text-xs line-clamp-2">{rel.excerpt}</p>
+      </div>
+    </div>
+    <div className="px-5 pb-4 text-[11px] font-extrabold text-rose-600">Đọc tiếp →</div>
+  </Link>
+);
+
+// ── Trang Chi Tiết Bài Viết (`/posts/[slug]`) ──
+export default function PostDetailPage() {
+  const { slug } = useParams();
+  const [post, setPost] = useState(null);
+  const [relatedPosts, setRelatedPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch newest products for "Sản phẩm mới" section
-        let productsData = [];
-        try {
-          const newProductsRes = await getNewProducts(5);
-          if (Array.isArray(newProductsRes)) {
-            productsData = newProductsRes;
-          } else if (newProductsRes?.data && Array.isArray(newProductsRes.data)) {
-            productsData = newProductsRes.data;
-          }
-        } catch (err) {
-          console.error('Error fetching new products:', err);
-        }
+    if (!slug) return;
+    setLoading(true);
+    Promise.all([getPostByIdOrSlug(slug), getActivePosts()])
+      .then(([detailRes, listRes]) => {
+        const detailData = detailRes.data?.data || detailRes.data;
+        if (detailData) setPost(formatDetailData(detailData));
 
-        // Fetch total products count from server
-        let totalProductsCount = productsData.length || 0;
-        try {
-          const productsStartLimitRes = await getProductsByStartLimit(0, 1);
-          if (productsStartLimitRes?.data?.pagination?.total !== undefined) {
-            totalProductsCount = productsStartLimitRes.data.pagination.total;
-          } else if (productsStartLimitRes?.pagination?.total !== undefined) {
-            totalProductsCount = productsStartLimitRes.pagination.total;
-          }
-          // Fallback if productsData was still empty
-          if (productsData.length === 0) {
-            if (Array.isArray(productsStartLimitRes?.data?.data)) {
-              productsData = productsStartLimitRes.data.data;
-            } else if (Array.isArray(productsStartLimitRes?.data)) {
-              productsData = productsStartLimitRes.data;
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching products by start limit:', err);
-        }
+        const listData = listRes.data?.data || listRes.data || [];
+        setRelatedPosts(
+          listData
+            .filter(p => p.slug !== slug && p.id !== Number(slug))
+            .slice(0, 3)
+            .map(p => ({ id: p.id, slug: p.slug || p.id, title: p.title, image: p.thumbnail || "/images/posts/european_tea_pastries.png", excerpt: p.description }))
+        );
+      })
+      .catch(err => console.error("Lỗi tải chi tiết bài viết:", err))
+      .finally(() => setLoading(false));
+  }, [slug]);
 
-        setProducts(productsData.slice(0, 5));
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#FFF5F7]">
+      <div className="w-12 h-12 rounded-full border-4 border-rose-200 border-t-rose-600 animate-spin mb-4" />
+      <p className="text-base font-bold text-rose-900">Đang tải toàn bộ nội dung bài viết...</p>
+    </div>
+  );
 
-        // Fetch orders - try multiple endpoints
-        let ordersData = [];
-        try {
-          const ordersRes = await getOrdersByPageSize(1, 100);
-          if (Array.isArray(ordersRes)) {
-            ordersData = ordersRes;
-          } else if (ordersRes?.data && Array.isArray(ordersRes.data)) {
-            ordersData = ordersRes.data;
-          } else if (ordersRes?.data?.data && Array.isArray(ordersRes.data.data)) {
-            ordersData = ordersRes.data.data;
-          }
-        } catch (err) {
-          console.error('Error fetching orders:', err);
-        }
-        
-        setOrders(ordersData.slice(0, 2));
-
-        // Fetch users
-        const usersRes = await getAllUsers();
-        let usersData = [];
-        if (Array.isArray(usersRes)) {
-          usersData = usersRes;
-        } else if (usersRes?.data && Array.isArray(usersRes.data)) {
-          usersData = usersRes.data;
-        }
-        setUsers(usersData);
-
-        // Calculate stats
-        const totalOrders = ordersData.length || 0;
-        
-        // Calculate total revenue from all orders
-        let totalRevenue = 0;
-        ordersData.forEach(order => {
-          const orderTotal = Number(order.total_amount ?? order.total ?? order.totalPrice ?? 0);
-          if (!isNaN(orderTotal)) {
-            totalRevenue += orderTotal;
-          }
-        });
-
-        setStats({
-          totalProducts: totalProductsCount,
-          totalOrders: totalOrders,
-          totalRevenue: totalRevenue,
-        });
-      } catch (err) {
-        console.error('Error fetching data:', err);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const formatCurrency = (value) => {
-    const num = Number(value);
-    if (isNaN(num)) {
-      return '0 ₫';
-    }
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      minimumFractionDigits: 0,
-    }).format(num).replace('₫', '₫').trim();
-  };
-
-  const getInitials = (name) => {
-    return name
-      ?.split(' ')
-      .slice(-1)[0]
-      ?.charAt(0)
-      ?.toUpperCase() || 'A';
-  };
+  if (!post) return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#FFF5F7] text-center space-y-4">
+      <span className="text-5xl block">⚠️</span>
+      <h1 className="text-2xl font-black text-rose-900">Không tìm thấy bài viết!</h1>
+      <p className="text-gray-600 text-sm">Bài viết bạn tìm kiếm có thể đã được chuyển đi hoặc không tồn tại.</p>
+      <Link href="/posts" className="px-6 py-3 bg-rose-600 text-white font-bold rounded-2xl shadow-md hover:bg-rose-700 transition-colors text-sm">← Quay lại danh sách bài viết</Link>
+    </div>
+  );
 
   return (
-    <div className="p-8 pb-16 flex flex-col min-h-full max-w-7xl mx-auto">
-      {/* Page Title */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500 tracking-tight mb-2">Tổng quan hệ thống</h1>
-          <p className="text-rose-900/60 font-medium text-sm">Chào mừng trở lại! Dưới đây là thống kê mới nhất của Bakery.</p>
+    <div className="min-h-screen py-10 px-4 md:px-8" style={{ background: "#FFF5F7" }}>
+      <article className="max-w-4xl mx-auto bg-white rounded-[32px] p-6 sm:p-12 md:p-16 shadow-xl border border-rose-100/80 space-y-8">
+        
+        {/* Breadcrumb & Navigation */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rose-100 pb-6">
+          <Link href="/posts" className="inline-flex items-center gap-2 text-xs sm:text-sm font-extrabold text-rose-600 hover:text-rose-800 transition-colors group">
+            <Icons.ArrowLeft /> Quay lại danh sách bài viết
+          </Link>
+          <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
+            <Link href="/" className="hover:text-rose-600">Trang chủ</Link>
+            <span>/</span>
+            <Link href="/posts" className="hover:text-rose-600">Góc bài viết</Link>
+            <span>/</span>
+            <span className="text-rose-600 font-bold truncate max-w-[150px] sm:max-w-[240px]">{post.title}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-rose-500 font-bold text-sm bg-white px-5 py-2.5 rounded-2xl border-2 border-pink-50 shadow-sm shadow-pink-100/50">
-          <svg className="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-          {currentDate}
-        </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div className="bg-gradient-to-r from-pink-400 to-rose-400 rounded-3xl p-8 relative overflow-hidden shadow-lg shadow-pink-200 text-white flex items-center h-40 group hover:-translate-y-1 transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
-          <div className="flex-1 z-10">
-            <p className="text-pink-100 font-bold uppercase tracking-wider mb-2 text-xs">Tổng Sản Phẩm</p>
-            <div className="flex items-baseline gap-3">
-              <h2 className="text-5xl font-black">{stats.totalProducts}</h2>
+        {/* Article Meta Header */}
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-bold">
+            <span className="px-4 py-1.5 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm flex items-center gap-1.5 uppercase tracking-wider text-[11px]"><Icons.Sparkles /> {post.category}</span>
+            <span className="text-gray-500 flex items-center gap-1.5 bg-pink-50/80 px-3 py-1.5 rounded-xl"><Icons.Calendar /> {post.date}</span>
+            <span className="text-gray-500 flex items-center gap-1.5 bg-pink-50/80 px-3 py-1.5 rounded-xl"><Icons.Clock /> {post.readTime}</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-rose-950 leading-snug tracking-tight">{post.title}</h1>
+
+          {/* Author Card Info Bar */}
+          <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-pink-400 to-rose-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md border-2 border-white">{post.author.charAt(0)}</div>
+              <div><p className="font-extrabold text-sm sm:text-base text-gray-900">{post.author}</p><p className="text-xs sm:text-sm text-rose-500 font-semibold">{post.authorRole}</p></div>
             </div>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 text-white shadow-inner z-10">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-rose-400 to-pink-500 rounded-3xl p-8 relative overflow-hidden shadow-lg shadow-rose-200 text-white flex items-center h-40 group hover:-translate-y-1 transition-all">
-          <div className="absolute bottom-0 right-10 w-32 h-32 bg-white/20 rounded-full blur-2xl -mb-10 group-hover:scale-150 transition-transform duration-700"></div>
-          <div className="flex-1 z-10">
-            <p className="text-rose-100 font-bold uppercase tracking-wider mb-2 text-xs">Đơn Hàng</p>
-            <div className="flex items-baseline gap-3">
-              <h2 className="text-5xl font-black">{stats.totalOrders}</h2>
-            </div>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 text-white shadow-inner z-10">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-pink-300 to-rose-300 rounded-3xl p-8 relative overflow-hidden shadow-lg shadow-pink-100 text-rose-900 flex items-center h-40 group hover:-translate-y-1 transition-all">
-          <div className="absolute top-1/2 right-0 w-32 h-32 bg-white/40 rounded-full blur-2xl -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
-          <div className="flex-1 z-10">
-            <p className="text-rose-800/70 font-bold uppercase tracking-wider mb-2 text-xs">Doanh Thu</p>
-            <div className="flex items-baseline gap-3">
-              <h2 className="text-3xl font-black tracking-tight">{formatCurrency(stats.totalRevenue).replace(' ₫', '')}</h2>
-            </div>
-          </div>
-          <div className="w-14 h-14 rounded-2xl bg-white/40 backdrop-blur-sm flex items-center justify-center border border-white/50 text-rose-700 shadow-inner z-10">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Tables Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Recent Products */}
-        <div className="bg-white rounded-3xl shadow-md shadow-pink-100/50 border border-pink-50 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-pink-50 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-100 to-rose-100 flex items-center justify-center text-pink-500 shadow-inner">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-              </div>
-              <h3 className="text-rose-900 font-bold text-lg">Sản phẩm mới</h3>
+              <span className="text-xs text-gray-400 font-medium hidden sm:inline">Chia sẻ bài viết:</span>
+              <div className="p-2.5 rounded-2xl bg-gray-50 border border-gray-100 hover:bg-rose-50 hover:border-rose-200 transition-colors"><Icons.Share /></div>
             </div>
-            <button className="text-sm font-bold text-pink-600 hover:text-pink-700 hover:bg-pink-50 px-4 py-2 rounded-full transition-colors">Xem tất cả &rarr;</button>
-          </div>
-          <div className="overflow-x-auto p-2">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-pink-400 font-bold text-[11px] uppercase tracking-wider">
-                  <th className="py-4 px-6 w-20">MÃ SP</th>
-                  <th className="py-4 px-6">TÊN SẢN PHẨM</th>
-                  <th className="py-4 px-6 text-right">GIÁ BÁN</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pink-50/50">
-                {products.map((p) => (
-                  <tr key={p.id} className="hover:bg-rose-50/40 transition-colors rounded-2xl">
-                    <td className="py-4 px-6 font-mono text-xs font-bold text-rose-300">#{p.id}</td>
-                    <td className="py-4 px-6 font-bold text-rose-900">{p.product_name || p.name || 'Sản phẩm'}</td>
-                    <td className="py-4 px-6 text-right font-black text-pink-600">{formatCurrency(p.price ?? p.sale_price ?? 0)}</td>
-                  </tr>
-                ))}
-                {products.length === 0 && (
-                  <tr>
-                    <td colSpan="3" className="py-4 px-6 text-center text-gray-400">Không có sản phẩm</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
 
-        {/* Recent Orders */}
-        <div className="bg-white rounded-3xl shadow-md shadow-pink-100/50 border border-pink-50 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-pink-50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-100 to-pink-100 flex items-center justify-center text-rose-500 shadow-inner">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-              </div>
-              <h3 className="text-rose-900 font-bold text-lg">Đơn hàng gần đây</h3>
-            </div>
-            <button className="text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-4 py-2 rounded-full transition-colors">Xem tất cả &rarr;</button>
-          </div>
-          <div className="overflow-x-auto p-2">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-pink-400 font-bold text-[11px] uppercase tracking-wider">
-                  <th className="py-4 px-6">KHÁCH HÀNG</th>
-                  <th className="py-4 px-6 text-center">TRẠNG THÁI</th>
-                  <th className="py-4 px-6 text-right">TỔNG TIỀN</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pink-50/50">
-                {orders.map((o) => {
-                  const statusColor = o.status === 'completed' 
-                    ? 'text-rose-700 bg-rose-50/80 border-rose-200'
-                    : o.status === 'pending'
-                    ? 'text-pink-700 bg-pink-50/80 border-pink-200'
-                    : 'text-yellow-700 bg-yellow-50/80 border-yellow-200';
-                  
-                  const statusText = o.status === 'completed' 
-                    ? 'Hoàn thành'
-                    : o.status === 'pending'
-                    ? 'Chờ xử lý'
-                    : 'Đang xử lý';
+        {/* Hero Cover Image */}
+        <div className="rounded-3xl overflow-hidden shadow-lg border border-rose-100 bg-pink-50 max-h-[500px] flex items-center justify-center">
+          <img src={post.image} alt={post.title} className="w-full h-full object-cover object-center max-h-[500px]" />
+        </div>
 
-                  return (
-                    <tr key={o.id} className="hover:bg-rose-50/40 transition-colors rounded-2xl">
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center font-black shrink-0 border border-pink-200">
-                            {getInitials(o.user?.name || o.customer_name || 'User')}
-                          </div>
-                          <div>
-                            <p className="font-bold text-rose-900 text-sm">{o.user?.name || o.customer_name || 'User'}</p>
-                            <p className="text-[11px] text-rose-400 font-mono mt-0.5 font-semibold">#O-{o.id}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide border ${statusColor}`}>
-                          {statusText}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-right font-black text-rose-600">{formatCurrency(o.total_amount ?? o.total ?? o.totalPrice ?? 0)}</td>
-                    </tr>
-                  );
-                })}
-                {orders.length === 0 && (
-                  <tr>
-                    <td colSpan="3" className="py-4 px-6 text-center text-gray-400">Không có đơn hàng</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* Excerpt Highlight */}
+        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-pink-50 to-rose-50/50 border-l-4 border-rose-500 text-rose-950 font-semibold text-base sm:text-lg leading-relaxed shadow-inner italic">
+          "{post.excerpt}"
+        </div>
+
+        {/* Rich Content Body */}
+        <div className="prose max-w-none text-gray-800 text-base sm:text-lg leading-relaxed space-y-6 pt-4 font-normal" dangerouslySetInnerHTML={{ __html: post.content }} />
+
+        {/* Footer Tags & Author Bio */}
+        <div className="pt-8 border-t border-rose-100 space-y-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tags:</span>
+              <span className="px-3.5 py-1.5 rounded-2xl bg-pink-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer">#SweetBakery</span>
+              <span className="px-3.5 py-1.5 rounded-2xl bg-pink-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer">#BánhNgọt</span>
+              <span className="px-3.5 py-1.5 rounded-2xl bg-pink-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer">#CôngThứcẨmThực</span>
+            </div>
+            <Link href="/products" className="px-6 py-3 rounded-2xl text-white font-extrabold text-xs sm:text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2" style={{ background: "linear-gradient(135deg, #f43f5e, #e11d48)" }}>
+              🍰 Khám phá quầy bánh của tiệm ngay
+            </Link>
+          </div>
+
+          <div className="bg-pink-50/60 rounded-3xl p-6 sm:p-8 border border-pink-100 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-pink-400 to-rose-600 text-white flex items-center justify-center font-black text-2xl shadow-md flex-shrink-0 border-2 border-white">{post.author.charAt(0)}</div>
+            <div className="text-center sm:text-left space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                <h4 className="font-extrabold text-gray-900 text-base sm:text-lg">{post.author}</h4>
+                <span className="text-xs font-bold text-rose-600 bg-rose-100 px-3 py-0.5 rounded-full w-fit mx-auto sm:mx-0">{post.authorRole}</span>
+              </div>
+              <p className="text-gray-600 text-xs sm:text-sm leading-relaxed">
+                Đam mê sáng tạo những món bánh ngọt chuẩn vị và chia sẻ những kiến thức làm bánh tử tế nhất đến cộng đồng người yêu ẩm thực.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </article>
 
+      {/* Related Posts Section */}
+      {relatedPosts.length > 0 && (
+        <div className="max-w-4xl mx-auto mt-12 space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-extrabold text-rose-900">📑 Có thể bạn quan tâm</h3>
+            <Link href="/posts" className="text-xs font-bold text-rose-600 hover:underline">Xem tất cả bài viết →</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {relatedPosts.map(rel => <RelatedCard key={rel.id} rel={rel} />)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

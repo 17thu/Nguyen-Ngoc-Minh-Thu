@@ -31,10 +31,12 @@ export async function getProductsFiltered(params = {}) {
         populate: '*'
     };
 
+    // STT 6: Tìm kiếm theo từ khóa -> Đóng gói toán tử $contains gửi lên Laravel
     if (search) {
         queryParams.filters.product_name = { $contains: search };
     }
 
+    // STT 4: Lọc theo Danh mục -> Đóng gói toán tử $eq (bằng ID danh mục) gửi lên Laravel
     if (category) {
         queryParams.filters.cat_id = { $eq: category };
     }
@@ -43,12 +45,14 @@ export async function getProductsFiltered(params = {}) {
         queryParams.filters.brand_id = { $eq: brand };
     }
 
+    // STT 5: Lọc theo khoảng Giá tiền -> Đóng gói toán tử $gte (>= minPrice) và $lte (<= maxPrice)
     if (minPrice || maxPrice) {
         queryParams.filters.price = {};
         if (minPrice) queryParams.filters.price.$gte = minPrice;
         if (maxPrice) queryParams.filters.price.$lte = maxPrice;
     }
 
+    // STT 7: Sắp xếp theo giá / mới nhất -> Gửi chuỗi sort sang Laravel (ví dụ price:asc)
     if (sortBy === 'price_asc') queryParams.sort = 'price:asc';
     if (sortBy === 'price_desc') queryParams.sort = 'price:desc';
     if (sortBy === 'newest') queryParams.sort = 'created_at:desc';
@@ -65,6 +69,12 @@ export async function getNewProducts(limit) {
 
 // Lấy sản phẩm bán chạy (hot products)
 export async function getBestSellers(limit) {
+    const res = await axiosClient.get(`/hotProducts/${limit}`);
+    return res;
+}
+
+// Lấy sản phẩm xem nhiều (most viewed)
+export async function getMostViewedProducts(limit) {
     const res = await axiosClient.get(`/hotProducts/${limit}`);
     return res;
 }
@@ -88,6 +98,12 @@ export async function createProduct(formData) {
 // Lấy chi tiết sản phẩm theo ID
 export async function getProductById(id) {
     const res = await axiosClient.get(`/products/${id}`);
+    return res;
+}
+
+// Lấy chi tiết sản phẩm theo Slug (tự động cộng lượt xem thật)
+export async function getProductBySlug(slug) {
+    const res = await axiosClient.get(`/showDetails/${slug}`);
     return res;
 }
 
